@@ -3,32 +3,49 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useKeyboardControls } from '@react-three/drei'
 import { RigidBody, useRapier } from '@react-three/rapier'
 import * as THREE from 'three'
+import { useStore } from './store'
 
 const SPEED = 6
 const JUMP_FORCE = 8
 
-export function Player() {
+export function Player({ isMobile }) {
   const body = useRef()
   const [, getKeys] = useKeyboardControls()
   const { camera } = useThree()
   const { rapier, world } = useRapier()
   
   const [recoil, setRecoil] = useState(0)
+  
+  // Connect to Zustand store
+  const storeInputs = useStore(state => state.inputs)
 
   useEffect(() => {
+    // Desktop recoil listener
     const handleMouseClick = () => {
-      if (document.pointerLockElement) {
-        setRecoil(0.2)
-      }
+      if (document.pointerLockElement) setRecoil(0.2)
     }
+    // Mobile recoil listener
+    const handleMobileShoot = () => { setRecoil(0.2) }
+
     window.addEventListener('mousedown', handleMouseClick)
-    return () => window.removeEventListener('mousedown', handleMouseClick)
+    window.addEventListener('mobileShoot', handleMobileShoot)
+    return () => {
+      window.removeEventListener('mousedown', handleMouseClick)
+      window.removeEventListener('mobileShoot', handleMobileShoot)
+    }
   }, [])
 
   useFrame((state, delta) => {
     if (!body.current) return
 
-    const { forward, backward, left, right, jump } = getKeys()
+    // 準則一：輸入層抽象化！合併鍵盤與手機狀態
+    const keys = getKeys()
+    const forward = keys.forward || storeInputs.forward
+    const backward = keys.backward || storeInputs.backward
+    const left = keys.left || storeInputs.left
+    const right = keys.right || storeInputs.right
+    const jump = keys.jump || storeInputs.jump
+
     const linvel = body.current.linvel()
     const pos = body.current.translation()
     
@@ -47,7 +64,7 @@ export function Player() {
 
     // True grounded check using Raycast
     const ray = new rapier.Ray(pos, { x: 0, y: -1, z: 0 })
-    const hit = world.castRay(ray, 1.1, true) // 1.1 is slightly larger than capsule half-height (1.0)
+    const hit = world.castRay(ray, 1.1, true)
     const grounded = hit && hit.toi < 1.1
 
     if (jump && grounded) {
@@ -70,7 +87,6 @@ export function Player() {
         </mesh>
       </RigidBody>
 
-      {/* The Gun - we attach it manually to the camera view using a portal or just fixed position if we put it in an HUD scene, but we can also just use a separate mesh and update its position to match camera */}
       <Gun camera={camera} recoil={recoil} />
     </>
   )
@@ -81,7 +97,6 @@ function Gun({ camera, recoil }) {
 
   useFrame(() => {
     if (gunRef.current) {
-      // Position gun relative to camera
       const offset = new THREE.Vector3(0.3, -0.3, -0.6 + recoil)
       offset.applyQuaternion(camera.quaternion)
       
@@ -92,17 +107,14 @@ function Gun({ camera, recoil }) {
 
   return (
     <group ref={gunRef}>
-      {/* Sci-Fi Gun Body */}
       <mesh position={[0, 0, 0]}>
         <boxGeometry args={[0.1, 0.1, 0.4]} />
         <meshStandardMaterial color="#222" metalness={0.8} roughness={0.2} />
       </mesh>
-      {/* Glowing Barrel */}
       <mesh position={[0, 0, -0.2]}>
         <cylinderGeometry args={[0.02, 0.02, 0.2]} />
         <meshStandardMaterial color="#00ffff" emissive="#00ffff" emissiveIntensity={2} />
       </mesh>
-      {/* Laser Beam (Only visible during recoil peak) */}
       {recoil > 0.15 && (
         <mesh position={[0, 0, -25]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.05, 0.05, 50]} />

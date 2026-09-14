@@ -1,7 +1,32 @@
 body, html, #root {
-  margin: 0;
-  padding: 0;
   width: 100vw;
   height: 100vh;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
+  /* 關鍵 1：禁止瀏覽器預設手勢（如縮放、滾動、下拉更新） */
+  touch-action: none;
+  /* 關鍵 2：禁止長按選取文字或彈出放大鏡 */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+canvas {
+  touch-action: none;
+}
+
+/* 雙平台透明覆蓋層 */
+.mobile-ui-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.mobile-button, .joystick-zone {
+  pointer-events: auto; /* 只有按鈕/搖桿能被按 */
 }
