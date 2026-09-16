@@ -5,7 +5,7 @@
 ## 啟動
 
 ```powershell
-cd "C:\Users\Ronald\Downloads\翔群組\r3f-game"
+cd "C:\r3f-game"
 npm run dev
 ```
 
