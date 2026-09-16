@@ -1701,3 +1701,54 @@ canvas {
     display: none;
   }
 }
+.difficulty-picker { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.difficulty-picker button { min-height: 44px; padding: 8px 18px; border: 1px solid #c3caff50; border-radius: 12px; background: #303650; color: #fff; }
+.difficulty-picker button[aria-pressed="true"] { background: #b4e9d6; color: #27463e; border-color: #b4e9d6; }
+.difficulty-picker small { flex-basis: 100%; color: #c3cbe0; font-size: 11px; }
+.decoration-notice { margin-top: 10px; min-height: 20px; font-size: 12px; color: #ffe3a2; }
+.slot-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.slot-picker > button:not(.text-button) { min-height: 44px; padding: 10px 6px; }
+.slot-picker > button:disabled { opacity: .5; }
+.slot-picker .text-button { grid-column: 1 / -1; min-height: 44px; }
+.slot-label { width: 44px; height: 44px; border: 1px solid #b4e9d6; font-size: 16px; touch-action: manipulation; }
+.collection-panel { max-height: 58dvh; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding-bottom: max(15px, env(safe-area-inset-bottom)); }
+@media (max-width: 650px) {
+  .difficulty-picker { justify-content: center; gap: 6px; margin: 8px 0; }
+  .difficulty-picker button { padding: 6px 14px; }
+  .difficulty-picker small { font-size: 10px; }
+  .hero-character-tag { display: none; }
+  .collection-panel { bottom: max(10px, env(safe-area-inset-bottom)); max-height: 48dvh; }
+  .decoration-card { min-height: 76px; }
+  .decoration-card b { font-size: 11px; }
+  .decoration-card small { font-size: 10px; }
+  .island-heading p { font-size: 12px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .island-heading { top: 22%; left: 3%; width: 40%; }
+  .collection-panel { left: auto; right: 2%; transform: none; width: 52%; max-height: 70dvh; bottom: 10px; }
+}
+@media (min-width: 651px) and (min-height: 651px) {
+  .hero-copy { top: 17%; }
+  .hero-description { margin-bottom: 12px; }
+}
+/* Give the island and collection controls separate, non-overlapping regions. */
+.screen-island .island-heading { top: 105px; left: 3%; right: 44%; }
+.island-stage { position: absolute; left: 3%; width: 53%; top: 220px; bottom: 24px; pointer-events: none; }
+.screen-island .collection-panel { left: auto; right: 3%; width: 39%; top: 130px; bottom: auto; transform: none; max-height: calc(100dvh - 154px); }
+@media (max-width: 650px) and (orientation: portrait) {
+  .screen-island .island-heading { top: 85px; left: 0; right: 0; }
+  .screen-island .island-heading .eyebrow { display: none; }
+  .screen-island .island-heading h1 { margin: 0 0 6px; font-size: 25px; }
+  .island-stage { left: 4%; width: 92%; top: 148px; bottom: 46dvh; }
+  .screen-island .collection-panel { top: auto; bottom: max(10px, env(safe-area-inset-bottom)); left: 4%; right: auto; width: 92%; max-height: calc(44dvh - env(safe-area-inset-bottom)); }
+}
+@media (max-height: 550px) and (orientation: landscape) {
+  .screen-island .island-heading { top: 76px; left: 2%; right: 54%; }
+  .screen-island .island-heading .eyebrow { display: none; }
+  .screen-island .island-heading h1 { font-size: 23px; margin: 0 0 4px; }
+  .island-stage { left: 2%; width: 44%; top: 132px; bottom: 12px; }
+  .screen-island .collection-panel { top: 76px; right: 2%; width: 50%; max-height: calc(100dvh - 88px); }
+}
+.bird-flight-label { display: block; white-space: nowrap; padding: 5px 9px; border-radius: 14px; background: #fff2cbe8; color: #57516b; font-size: 11px; font-weight: 700; user-select: none; }
+.screen-island canvas { cursor: grab; }
+.screen-island canvas:active { cursor: grabbing; }

@@ -24,6 +24,13 @@ export const SECTORS = [
     reward: "rocket",
   },
   {
+    name: "旋風遊樂場", subtitle: "泡泡開始加速，抓準轉彎的時機！", total: 18, limit: 5, color: "#82d9ff", reward: "pinwheel",
+  },
+  { name: "水晶護盾谷", subtitle: "更多雙層護盾！先破盾，再接連擊。", total: 21, limit: 5, color: "#c5afff", reward: "flower" },
+  { name: "極光追逐賽", subtitle: "六顆泡泡一起飛！用彩虹串起救援。", total: 24, limit: 6, color: "#80ffcd", reward: "rocket" },
+  { name: "星際衝刺道", subtitle: "三層護甲登場！留好大招，一次突破。", total: 27, limit: 6, color: "#ffb487", reward: "rocket" },
+  {
+    boss: true,
     name: "烏雲船長",
     subtitle: "先點亮三顆衛星，再戳船長的鼻子！",
     total: 12,
@@ -32,6 +39,15 @@ export const SECTORS = [
     reward: "crown",
   },
 ];
+
+export const DIFFICULTIES = {
+  easy: { name: "輕鬆", speed: 0.8, comboWindow: 3.8 },
+  normal: { name: "挑戰", speed: 1.2, comboWindow: 2.8 },
+  hard: { name: "高手", speed: 1.7, comboWindow: 1.8 },
+};
+export function comboWindow(game) {
+  return DIFFICULTIES[game.difficulty]?.comboWindow ?? 3.2;
+}
 
 const COLORS = ["#ffd36d", "#ff99c1", "#91ead7", "#bba5ff"];
 const LAYOUT = [
@@ -43,9 +59,10 @@ const LAYOUT = [
   [0, 0.65],
 ];
 
-export function createGame(runId = 1) {
+export function createGame(runId = 1, difficulty = "normal") {
   return spawnWave({
     runId,
+    difficulty: DIFFICULTIES[difficulty] ? difficulty : "normal",
     time: 0,
     stage: 0,
     phase: "active",
@@ -76,7 +93,7 @@ function makeTarget(g, slot) {
   const serial = g.serial + 1;
   let kind = "normal";
   if (g.stage >= 1 && serial % 4 === 0) kind = "rainbow";
-  if (g.stage >= 2 && serial % 3 === 0) kind = "armored";
+  if (g.stage >= 2 && kind !== "rainbow" && serial % (g.stage >= 4 ? 2 : 3) === 0) kind = "armored";
   const layoutIndex = (slot + g.stage + (g.runId % 2)) % LAYOUT.length;
   const [x, y] = LAYOUT[layoutIndex];
   return {
@@ -86,7 +103,7 @@ function makeTarget(g, slot) {
     x,
     y,
     kind,
-    hp: kind === "armored" ? 2 : 1,
+    hp: kind === "armored" ? (g.stage >= 6 ? 3 : 2) : 1,
     color: COLORS[serial % COLORS.length],
     seed: serial * 1.73,
     bornAt: g.time,
@@ -96,7 +113,7 @@ function makeTarget(g, slot) {
 
 function spawnWave(game) {
   let g = { ...game };
-  if (g.stage === 3) return spawnBossNodes(g);
+  if (SECTORS[g.stage].boss) return spawnBossNodes(g);
   const { limit, total } = SECTORS[g.stage];
   const targets = [...g.targets];
   for (let slot = 0; slot < limit && g.spawned < total; slot++) {
@@ -128,11 +145,11 @@ export function targetPosition(target, game) {
   const age = game.time - target.bornAt;
   if (target.kind === "core") return { x: 0, y: 0.08 };
   if (target.kind === "satellite") {
-    const angle = (target.slot * Math.PI * 2) / 3 + game.time * 0.38;
+    const angle = (target.slot * Math.PI * 2) / 3 + game.time * (0.55 + game.bossHits * 0.18) * (DIFFICULTIES[game.difficulty]?.speed ?? 1);
     return { x: Math.cos(angle) * 0.66, y: 0.08 + Math.sin(angle) * 0.66 };
   }
-  const speed = game.stage === 2 ? 1.2 : 0.65;
-  const travel = game.stage === 2 ? 0.17 : 0.09;
+  const speed = (0.65 + game.stage * 0.25) * (DIFFICULTIES[game.difficulty]?.speed ?? 1);
+  const travel = Math.min(0.23, 0.09 + game.stage * 0.025);
   return {
     x: target.x + Math.sin(age * speed + target.seed) * travel,
     y: target.y + Math.sin(age * speed * 1.3 + target.seed) * travel,
@@ -143,7 +160,7 @@ export function stepGame(game, dt) {
   if (game.phase === "complete") return game;
   const time = game.time + Math.max(0, Math.min(dt, 0.1));
   let g = { ...game, time };
-  if (g.combo && time - g.lastHitAt > 3.2) g.combo = 0;
+  if (g.combo && time - g.lastHitAt > comboWindow(g)) g.combo = 0;
   if (g.effects.some((e) => time - e.at > 1.15))
     g.effects = g.effects.filter((e) => time - e.at <= 1.15);
   if (g.phase === "interlude" && time >= g.transitionAt) {
@@ -161,7 +178,7 @@ export function stepGame(game, dt) {
     });
   } else if (
     g.phase === "active" &&
-    g.stage < 3 &&
+    !SECTORS[g.stage].boss &&
     time >= g.nextSpawnAt &&
     g.targets.length < SECTORS[g.stage].limit &&
     g.spawned < SECTORS[g.stage].total
@@ -195,7 +212,7 @@ export function hitTarget(game, id, isBurst = false) {
           at: game.time,
           id: shot.serial,
           color: "#ffffff",
-          text: "再一下！",
+          text: target.hp > 2 ? "還有兩層！" : "再一下！",
           kind: "crack",
         },
       ],
@@ -213,7 +230,7 @@ export function hitTarget(game, id, isBurst = false) {
   }
   const rescued = game.targets.filter((t) => ids.includes(t.id));
   const combo =
-    (game.time - game.lastHitAt <= 3.2 ? game.combo : 0) + rescued.length;
+    (game.time - game.lastHitAt <= comboWindow(game) ? game.combo : 0) + rescued.length;
   const multiplier = Math.min(4, 1 + Math.floor(combo / 4));
   const gained = rescued.length * 100 * multiplier;
   let g = {
@@ -251,7 +268,7 @@ export function hitTarget(game, id, isBurst = false) {
       count: rescued.length,
     },
   };
-  if (game.stage === 3) {
+  if (SECTORS[game.stage].boss) {
     if (target.kind === "core") {
       g.bossHits++;
       g.banner = [

@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Html, Stars } from "@react-three/drei";
 import * as THREE from "three";
 import { useGameStore, useSaveStore } from "./store";
 import { targetPosition } from "./game";
 import { initAudio, playFeedback } from "./audio";
+import { stepFlight } from "./islandPhysics";
 
 function worldTime(clock) {
   const s = useGameStore.getState();
@@ -411,7 +412,7 @@ export function BubbleTarget({ target }) {
               : isRainbow
                 ? "✦ 彩虹連鎖"
                 : isArmor
-                  ? "雙層 · 點兩下"
+                  ? `護甲 · 剩 ${target.hp} 層`
                   : target.hp === 1 && target.kind === "armored"
                     ? "再一下！"
                     : ""}
@@ -686,36 +687,146 @@ export function Pinwheel({ kind = "pinwheel" }) {
   );
 }
 
+function FlyingBird({ position, scale = 1, color, variant = 0, preview }) {
+  const groundY = position[1];
+  const ref = useRef();
+  const { gl, camera } = useThree();
+  const body = useRef({ x: position[0], y: 0, vx: 0, vy: 0 });
+  const drag = useRef(null);
+  const [mood, setMood] = useState("");
+  const moodUntil = useRef(0);
+  const projection = useMemo(() => ({ ray: new THREE.Raycaster(), point: new THREE.Vector3(), plane: new THREE.Plane(), mouse: new THREE.Vector2() }), []);
+  const speak = (message) => { setMood(message); moodUntil.current = performance.now() + 1800; };
+  const launch = () => {
+    body.current.vy = 5.8;
+    initAudio(); playFeedback("chain", 3); speak("啾！飛起來囉！");
+  };
+  useEffect(() => {
+    if (preview) return;
+    const canvas = gl.domElement;
+    const move = (event) => {
+      const held = drag.current;
+      if (!held || held.id !== event.pointerId || !ref.current) return;
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      projection.mouse.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
+      projection.ray.setFromCamera(projection.mouse, camera);
+      if (!projection.ray.ray.intersectPlane(projection.plane, projection.point)) return;
+      ref.current.parent.worldToLocal(projection.point);
+      const x = THREE.MathUtils.clamp(projection.point.x + held.offsetX, -2.1, 2.1);
+      const y = THREE.MathUtils.clamp(projection.point.y + held.offsetY - groundY, 0, 2.5);
+      const dt = Math.max(0.016, (event.timeStamp - held.at) / 1000);
+      body.current = { x, y, vx: THREE.MathUtils.clamp((x - body.current.x) / dt, -4, 4), vy: THREE.MathUtils.clamp((y - body.current.y) / dt, -6, 6) };
+      held.moved ||= Math.hypot(event.clientX - held.startX, event.clientY - held.startY) > 5;
+      held.at = event.timeStamp;
+    };
+    const release = (event) => {
+      const held = drag.current;
+      if (!held || held.id !== event.pointerId) return;
+      drag.current = null;
+      if (canvas.hasPointerCapture(held.id)) canvas.releasePointerCapture(held.id);
+      if (event.type === "pointerup" && !held.moved) launch();
+      else {
+        if (event.type !== "pointerup" || event.timeStamp - held.at > 100) { body.current.vx = 0; body.current.vy = 0; }
+        speak("呼～降落囉！");
+      }
+    };
+    const cancel = () => { if (drag.current) release({ pointerId: drag.current.id, type: "cancel" }); };
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    canvas.addEventListener("lostpointercapture", release);
+    window.addEventListener("blur", cancel);
+    return () => {
+      cancel();
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      canvas.removeEventListener("lostpointercapture", release);
+      window.removeEventListener("blur", cancel);
+    };
+  }, [preview, gl, camera, projection, groundY]);
+  useFrame((_, dt) => {
+    if (!ref.current || preview) return;
+    if (!drag.current) body.current = stepFlight(body.current, dt, position[0]);
+    const b = body.current;
+    ref.current.position.set(b.x, position[1] + b.y, position[2]);
+    ref.current.rotation.z = useSaveStore.getState().reducedMotion ? 0 : -b.vx * 0.06;
+    if (mood && !drag.current && performance.now() > moodUntil.current) setMood("");
+  });
+  const grab = (event) => {
+    if (preview || drag.current || event.button !== 0) return;
+    event.stopPropagation();
+    const world = ref.current.getWorldPosition(new THREE.Vector3());
+    projection.plane.set(new THREE.Vector3(0, 0, 1), -world.z);
+    event.ray.intersectPlane(projection.plane, projection.point);
+    ref.current.parent.worldToLocal(projection.point);
+    drag.current = { id: event.pointerId, offsetX: body.current.x - projection.point.x,
+      offsetY: position[1] + body.current.y - projection.point.y,
+      startX: event.clientX, startY: event.clientY, at: event.timeStamp, moved: false };
+    body.current.vx = 0; body.current.vy = 0;
+    gl.domElement.setPointerCapture(event.pointerId);
+    initAudio(); speak("抓住我，一起飛！");
+  };
+  return <group ref={ref} position={position} scale={scale} onPointerDown={grab}>
+    <Bobo color={color} variant={variant} happy={preview || !!mood} />
+    {!preview && <Html center position={[0, 1.15, 0]} zIndexRange={[2, 0]} style={{ pointerEvents: "none" }}>
+      <span className="bird-flight-label" data-bird={variant}>{mood || "抓我飛 ↗"}</span>
+    </Html>}
+  </group>;
+}
+
 export function Island3D({ preview = false }) {
   const slots = useSaveStore((s) => s.slots);
   const creatures = useSaveStore((s) => s.creatureIds);
   const selected = useGameStore((s) => s.selectedDecoration);
   const viewport = useSceneViewport();
-  const [dance, setDance] = useState(0);
   const island = useRef();
-  const scale = Math.min(
+  const { size, gl } = useThree();
+  const [displayArea, setDisplayArea] = useState(null);
+  useEffect(() => {
+    if (preview) return;
+    const stage = document.querySelector(".island-stage");
+    if (!stage) return;
+    const measure = () => {
+      const rect = stage.getBoundingClientRect();
+      const canvas = gl.domElement.getBoundingClientRect();
+      setDisplayArea({ width: rect.width, height: rect.height,
+        x: rect.left + rect.width / 2 - canvas.left,
+        y: rect.top + rect.height / 2 - canvas.top });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    window.addEventListener("resize", measure);
+    return () => { observer.disconnect(); window.removeEventListener("resize", measure); };
+  }, [preview, gl, size.width, size.height]);
+  const unitsPerPixel = viewport.width / size.width;
+  const scale = !preview && displayArea
+    ? Math.min(displayArea.width / 6.6, displayArea.height / 7.2) * unitsPerPixel
+    : Math.min(
     preview ? 1.3 : 1.55,
     viewport.width / (preview ? 7.5 : 9),
   );
+  const centerX = !preview && displayArea
+    ? (displayArea.x - size.width / 2) * unitsPerPixel
+    : preview && viewport.width > 13 ? 3.8 : 0;
+  const centerY = !preview && displayArea
+    ? (size.height / 2 - displayArea.y) * unitsPerPixel - scale * 0.9
+    : -0.5;
   useFrame(({ clock }) => {
     if (island.current)
       island.current.position.y =
-        -0.5 +
+        centerY +
         (useSaveStore.getState().reducedMotion
           ? 0
           : Math.sin(clock.elapsedTime) * 0.07);
   });
-  const tapCreature = (e) => {
-    e.stopPropagation();
-    initAudio();
-    playFeedback("chain", 5);
-    setDance((n) => n + 1);
-  };
   return (
     <group
       ref={island}
       scale={scale}
-      position={[preview && viewport.width > 13 ? 3.8 : 0, -0.5, 0]}
+      position={[centerX, centerY, 0]}
     >
       <group rotation={[0.28, 0, 0]}>
         <mesh position={[0, -1.08, 0]}>
@@ -737,30 +848,12 @@ export function Island3D({ preview = false }) {
           </mesh>
         ))}
       </group>
-      <group
-        onPointerDown={tapCreature}
-        position={[0, -0.08, 0.6]}
-        scale={1.35}
-      >
-        <Bobo key={dance} happy={dance > 0 || preview} />
-      </group>
+      <FlyingBird position={[0, -0.08, 0.6]} scale={1.35} preview={preview} />
       {(preview || creatures.includes("tangtang")) && (
-        <group
-          onPointerDown={tapCreature}
-          position={[-1.35, -0.16, 0.15]}
-          scale={0.95}
-        >
-          <Bobo color="#ffa8c7" variant={1} happy={dance > 0} />
-        </group>
+        <FlyingBird position={[-1.35, -0.16, 0.15]} scale={0.95} color="#ffa8c7" variant={1} preview={preview} />
       )}
       {(preview || creatures.includes("dongdong")) && (
-        <group
-          onPointerDown={tapCreature}
-          position={[1.4, -0.16, 0.12]}
-          scale={1}
-        >
-          <Bobo color="#91ead7" variant={2} happy={dance > 0} />
-        </group>
+        <FlyingBird position={[1.4, -0.16, 0.12]} color="#91ead7" variant={2} preview={preview} />
       )}
       {[0, 1, 2, 3].map((slot) => {
         const x = [-1.9, -0.67, 0.67, 1.9][slot];
@@ -786,26 +879,17 @@ export function Island3D({ preview = false }) {
               <Html
                 center
                 position={[0, -0.3, 0.1]}
-                style={{ pointerEvents: "none" }}
+                style={{ pointerEvents: "auto" }}
+                zIndexRange={[2, 0]}
               >
-                <span className={`slot-label ${selected ? "selectable" : ""}`}>
+                <button type="button" disabled={!selected} onClick={(e) => { e.stopPropagation(); useGameStore.getState().decorate(slot); }} aria-label={`擺放到位置 ${slot + 1}`} className={`slot-label ${selected ? "selectable" : ""}`}>
                   {slot + 1}
-                </span>
+                </button>
               </Html>
             )}
           </group>
         );
       })}
-      {dance > 0 && (
-        <Html
-          key={dance}
-          center
-          position={[0, 1.2, 1]}
-          style={{ pointerEvents: "none" }}
-        >
-          <span className="creature-speech">啵！一起跳舞！♪</span>
-        </Html>
-      )}
     </group>
   );
 }

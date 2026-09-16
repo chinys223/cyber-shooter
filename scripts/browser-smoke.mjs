@@ -117,7 +117,7 @@ try {
   await page.getByRole("button", { name: "繼續冒險" }).click();
   const captured = new Set([0]);
   let usedBurst = false;
-  for (let n = 0; n < 180; n++) {
+  for (let n = 0; n < 600; n++) {
     const s = await state();
     if (s.screen === "result") break;
     if (s.screen === "paused")
@@ -150,7 +150,7 @@ try {
   await snap("desktop-result");
   await page.getByRole("button", { name: "去布置我的小島" }).click();
   await page.getByRole("button", { name: /星光風車/ }).click();
-  await page.getByRole("button", { name: "位置 2" }).click();
+  await page.locator(".slot-picker > button").nth(1).click();
   assert.equal((await state()).save.slots[1], "pinwheel");
   await snap("desktop-island");
   await page.reload({ waitUntil: "networkidle" });
@@ -202,6 +202,17 @@ try {
   await snap("mobile-playing");
   await page.getByRole("button", { name: "暫停遊戲" }).click();
   await page.getByRole("button", { name: "結束這趟，回小島" }).click();
+  for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(viewport);
+    await page.locator(".decoration-card").first().tap();
+    await page.locator(".slot-picker > button").nth(2).tap();
+    assert.equal((await state()).save.slots[2], "pinwheel");
+    assert.equal(Object.values((await state()).save.slots).filter((id) => id === "pinwheel").length, 1);
+    await page.locator(".decoration-card").first().tap();
+    await page.locator(".slot-picker > button").first().tap();
+    assert.equal((await state()).save.slots[0], "pinwheel");
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await snap("mobile-island");
   assert.equal(
     await page.evaluate(

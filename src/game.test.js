@@ -1,5 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { stepFlight } from "./islandPhysics.js";
+
+test("released birds fall, bounce, and settle safely at home", () => {
+  let body = { x: 1.8, y: 2, vx: 3, vy: 0 };
+  let bounced = false;
+  for (let i = 0; i < 1200; i++) {
+    const previous = body;
+    body = stepFlight(body, 1 / 120, 0);
+    if (previous.vy < 0 && body.vy > 0) bounced = true;
+    assert.ok(body.y >= 0 && body.y <= 2.5);
+    assert.ok(Math.abs(body.x) <= 2.1);
+  }
+  assert.equal(bounced, true);
+  assert.equal(body.y, 0);
+  assert.ok(Math.abs(body.x) < 0.001);
+  assert.equal(body.vy, 0);
+});
 import {
   createGame,
   stepGame,
@@ -27,7 +44,7 @@ test("complete journey reaches each sector, reveals captain nose, and ends once"
   const seen = new Set();
   const cores = [];
   let iterations = 0;
-  while (g.phase !== "complete" && iterations++ < 250) {
+  while (g.phase !== "complete" && iterations++ < 800) {
     seen.add(g.stage);
     if (g.targets.length && g.phase === "active") {
       const t = g.targets[0];
@@ -40,7 +57,7 @@ test("complete journey reaches each sector, reveals captain nose, and ends once"
     }
     g = advance(g, 0.5);
   }
-  assert.deepEqual([...seen], [0, 1, 2, 3]);
+  assert.deepEqual([...seen], SECTORS.map((_, i) => i));
   assert.deepEqual(cores, [0, 1, 2]);
   assert.equal(g.phase, "complete");
   assert.equal(
@@ -115,7 +132,7 @@ test("burst is charged, clears armor, and does not hit newly revealed captain no
   assert.equal(burst.energy, 0);
   let boss = {
     ...initial,
-    stage: 3,
+    stage: SECTORS.length - 1,
     energy: 100,
     targets: [0, 1, 2].map((slot) => ({
       id: `s${slot}`,
@@ -155,4 +172,47 @@ test("combo expires and targets remain inside the planned field over time", () =
     }
   }
   assert.notEqual(createGame(2).targets[0].id, createGame(1).targets[0].id);
+});
+
+test("all difficulties can finish eight sectors and keep moving targets in bounds", () => {
+  for (const difficulty of ["easy", "normal", "hard"]) {
+    let g = createGame(10, difficulty);
+    let tripleArmor = false;
+    for (let i = 0; i < 1000 && g.phase !== "complete"; i++) {
+      for (const target of g.targets) {
+        const p = targetPosition(target, g);
+        assert.ok(Math.abs(p.x) < 1 && Math.abs(p.y) < 1);
+        if (target.hp === 3) tripleArmor = true;
+      }
+      if (g.targets.length) g = hitTarget(g, g.targets[0].id);
+      g = advance(g, 0.5);
+    }
+    assert.equal(g.phase, "complete", difficulty);
+    assert.equal(g.stage, 7);
+    assert.equal(tripleArmor, true);
+  }
+});
+
+test("hard mode shortens the combo window and changes target movement", () => {
+  const easy = createGame(1, "easy");
+  const hard = createGame(1, "hard");
+  const easyHit = advance(hitTarget(easy, easy.targets[0].id), 2.1);
+  const hardHit = advance(hitTarget(hard, hard.targets[0].id), 2.1);
+  assert.equal(easyHit.combo, 1);
+  assert.equal(hardHit.combo, 0);
+  assert.notDeepEqual(targetPosition(easy.targets[1], easyHit), targetPosition(hard.targets[1], hardHit));
+});
+
+test("triple armor needs three hits but a charged burst can clear it", () => {
+  const base = createGame();
+  const target = { ...base.targets[0], kind: "armored", hp: 3 };
+  const initial = { ...base, targets: [target], energy: 100 };
+  let g = hitTarget(initial, target.id);
+  assert.equal(g.targets[0].hp, 2);
+  g = hitTarget(advance(g, 0.3), target.id);
+  assert.equal(g.targets[0].hp, 1);
+  assert.equal(g.rescued, 0);
+  g = hitTarget(advance(g, 0.3), target.id);
+  assert.equal(g.rescued, 1);
+  assert.equal(fireBurst(initial).targets.length, 0);
 });

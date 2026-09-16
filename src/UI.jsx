@@ -1,5 +1,5 @@
 import { useGameStore, useSaveStore } from "./store";
-import { SECTORS } from "./game";
+import { SECTORS, DIFFICULTIES, comboWindow } from "./game";
 import { initAudio } from "./audio";
 
 const DECOR = [
@@ -28,7 +28,7 @@ function ComboMeter() {
     s.game.combo > 0
       ? Math.max(
           0,
-          Math.round((1 - (s.game.time - s.game.lastHitAt) / 3.2) * 20),
+          Math.round((1 - (s.game.time - s.game.lastHitAt) / comboWindow(s.game)) * 20),
         )
       : 0,
   );
@@ -68,6 +68,7 @@ function Brand() {
 }
 
 function HomeScreen() {
+  const difficulty = useGameStore((s) => s.difficulty);
   const best = useSaveStore((s) => s.bestScore);
   const collection = useSaveStore((s) => s.decorationIds.length);
   return (
@@ -95,6 +96,12 @@ function HomeScreen() {
           <br />
           把愛搗蛋的烏雲船長，變成新朋友。
         </p>
+        <div className="difficulty-picker" role="group" aria-label="冒險難度">
+          {Object.entries(DIFFICULTIES).map(([id, mode]) => (
+            <button key={id} aria-pressed={difficulty === id} onClick={() => useGameStore.getState().setDifficulty(id)}>{mode.name}</button>
+          ))}
+          <small>8 關冒險 · 後段加速與三層護甲</small>
+        </div>
         <button
           className="primary-button start-button"
           onClick={() => useGameStore.getState().startLevel()}
@@ -137,7 +144,7 @@ function HomeScreen() {
         </div>
       </div>
       <footer className="home-footer">
-        <span>霓虹泡泡樂園 · 3 個星區 + 船長挑戰</span>
+        <span>霓虹泡泡樂園 · 7 個星區 + 船長挑戰</span>
         <span>為好奇的小小探險家打造 ✦</span>
       </footer>
     </section>
@@ -163,20 +170,20 @@ function GameHUD() {
       <header className="game-topbar">
         <div className="sector-heading">
           <span className="sector-number">
-            {stage === 3 ? "♛" : `0${stage + 1}`}
+            {sector.boss ? "♛" : `0${stage + 1}`}
           </span>
           <div>
-            <small>{stage === 3 ? "最後的好朋友" : "救援進行中"}</small>
+            <small>{sector.boss ? "最後的好朋友" : "救援進行中"}</small>
             <h2>{sector.name}</h2>
           </div>
         </div>
-        <div className="route" aria-label={`目前第 ${stage + 1} 區，共四區`}>
+        <div className="route" aria-label={`目前第 ${stage + 1} 區，共 ${SECTORS.length} 區`}>
           {SECTORS.map((s, i) => (
             <span
               key={s.name}
               className={i === stage ? "current" : i < stage ? "done" : ""}
             >
-              {i < stage ? "✓" : i === 3 ? "♛" : i + 1}
+              {i < stage ? "✓" : s.boss ? "♛" : i + 1}
             </span>
           ))}
         </div>
@@ -249,7 +256,7 @@ function GameHUD() {
           <button key={t.id} onClick={() => useGameStore.getState().hit(t.id)}>
             救援目標 {i + 1}
             {t.kind === "armored"
-              ? "（雙層）"
+                ? `（護甲剩 ${t.hp} 層）`
               : t.kind === "rainbow"
                 ? "（連鎖）"
                 : ""}
@@ -267,7 +274,7 @@ function GameHUD() {
               <br />
               <em>救援成功！</em>
             </h2>
-            <p>已收藏：{DECOR[stage].name}</p>
+            <p>已收藏：{DECOR.find((d) => d.id === sector.reward).name}</p>
             <div className="next-sector">
               下一站 · {SECTORS[stage + 1]?.name} →
             </div>
@@ -404,6 +411,7 @@ function IslandScreen() {
   const owned = useSaveStore((s) => s.decorationIds);
   const selected = useGameStore((s) => s.selectedDecoration);
   const slots = useSaveStore((s) => s.slots);
+  const notice = useGameStore((s) => s.decorationNotice);
   return (
     <section className="island-screen">
       <header className="topbar">
@@ -422,9 +430,10 @@ function IslandScreen() {
         <p>
           {selected
             ? "點島上的數字，或下方按鈕，把收藏放上去。"
-            : "點點小夥伴，看看牠們的開心舞。"}
+            : "抓住小鳥拖著飛，放手自由落下；點一下也會跳！"}
         </p>
       </div>
+      <div className="island-stage" aria-hidden="true" />
       <div className="collection-panel">
         <div className="collection-title">
           <h2>
@@ -442,6 +451,7 @@ function IslandScreen() {
             <button
               key={d.id}
               className={`decoration-card ${selected === d.id ? "selected" : ""}`}
+              aria-pressed={selected === d.id}
               disabled={!owned.includes(d.id)}
               onClick={() => useGameStore.getState().selectDecoration(d.id)}
             >
@@ -457,15 +467,15 @@ function IslandScreen() {
             </button>
           ))}
         </div>
-        {selected && (
+        <p className="decoration-notice" role="status">{notice || (selected ? `已選：${DECOR.find((d) => d.id === selected)?.name}，請選擇位置` : owned.length ? "選擇上方小物，即可擺放或換位置" : "先完成第一關，就能取得風車！")}</p>
           <div className="slot-picker">
-            <span>放到哪裡？</span>
             {[0, 1, 2, 3].map((i) => (
               <button
                 key={i}
+                disabled={!selected}
                 onClick={() => useGameStore.getState().decorate(i)}
               >
-                位置 {i + 1}
+                位置 {i + 1} · {slots[i] ? DECOR.find((d) => d.id === slots[i])?.name : "空位"}
               </button>
             ))}
             <button
@@ -475,7 +485,6 @@ function IslandScreen() {
               取消
             </button>
           </div>
-        )}
       </div>
     </section>
   );

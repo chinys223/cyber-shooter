@@ -46,7 +46,7 @@ export const useSaveStore = create(
           creatureIds: [
             ...new Set([
               ...s.creatureIds,
-              ["bobo", "tangtang", "dongdong", "captain"][stage],
+              ["bobo", "tangtang", "dongdong", "captain"][DECORATIONS.indexOf(SECTORS[stage].reward)],
             ]),
           ],
           decorationIds: [
@@ -99,7 +99,7 @@ export const useSaveStore = create(
         }
         return {
           ...current,
-          completedLevels: list("completedLevels", [1, 2, 3, 4]),
+          completedLevels: list("completedLevels", SECTORS.map((_, i) => i + 1)),
           creatureIds: list("creatureIds", [
             "bobo",
             "tangtang",
@@ -135,12 +135,15 @@ export const useGameStore = create((set, get) => ({
   game: createGame(0),
   selectedDecoration: null,
   saveWarning: false,
+  difficulty: "normal",
+  setDifficulty: (difficulty) => set({ difficulty }),
+  decorationNotice: "",
   setScreen: (screen) => set({ screen }),
   startLevel: () => {
     initAudio();
     const settings = useSaveStore.getState();
     setAudioState(settings.isMuted, true);
-    set({ screen: "playing", game: createGame(get().game.runId + 1) });
+    set({ screen: "playing", game: createGame(get().game.runId + 1, get().difficulty) });
   },
   pauseGame: () => {
     if (get().screen === "playing") set({ screen: "paused" });
@@ -162,13 +165,15 @@ export const useGameStore = create((set, get) => ({
     const previous = get().game;
     commitResult(previous, fireBurst(previous), set);
   },
-  selectDecoration: (id) => set({ selectedDecoration: id }),
+  selectDecoration: (id) => set({ selectedDecoration: id, decorationNotice: "" }),
   decorate: (slot) => {
     const id = get().selectedDecoration;
     if (id) {
+      if (!Number.isInteger(slot) || slot < 0 || slot > 3 || !useSaveStore.getState().decorationIds.includes(id)) return;
+      initAudio();
       useSaveStore.getState().placeDecoration(slot, id);
       playFeedback("pop", 1);
-      set({ selectedDecoration: null });
+      set({ selectedDecoration: null, decorationNotice: `已放到位置 ${slot + 1}！` });
     }
   },
 }));

@@ -10,6 +10,7 @@ import {
   Island3D,
   SpaceBackdrop,
 } from "./GameComponents";
+import { SECTORS } from "./game";
 import { setAudioState } from "./audio";
 
 function Scene() {
@@ -42,7 +43,7 @@ function Scene() {
       <SpaceBackdrop />
       {inGame ? (
         <>
-          {stage === 3 && <Captain />}
+          {SECTORS[stage].boss && <Captain />}
           {targets.map((t) => (
             <BubbleTarget key={t.id} target={t} />
           ))}
